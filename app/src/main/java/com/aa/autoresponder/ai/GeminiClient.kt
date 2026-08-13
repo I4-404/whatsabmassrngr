@@ -67,13 +67,34 @@ object GeminiClient {
                     return@withContext Result.failure(Exception("فشل الاتصال بـ Gemini: ${response.code} - $bodyStr"))
                 }
                 val json = JSONObject(bodyStr)
-                val text = json
-                    .getJSONArray("candidates")
-                    .getJSONObject(0)
-                    .getJSONObject("content")
-                    .getJSONArray("parts")
-                    .getJSONObject(0)
-                    .getString("text")
+
+                // لو الطلب اتحجب بالكامل قبل توليد أي رد (مثلاً بسبب فلتر الأمان)
+                val promptFeedback = json.optJSONObject("promptFeedback")
+                val blockReason = promptFeedback?.optString("blockReason")
+                if (!blockReason.isNullOrBlank()) {
+                    return@withContext Result.failure(Exception("تم حجب الرسالة من Gemini (blockReason: $blockReason)"))
+                }
+
+                val candidates = json.optJSONArray("candidates")
+                if (candidates == null || candidates.length() == 0) {
+                    return@withContext Result.failure(Exception("Gemini لم يُرجع أي رد (استجابة فارغة)"))
+                }
+
+                val firstCandidate = candidates.getJSONObject(0)
+                val finishReason = firstCandidate.optString("finishReason")
+                val content = firstCandidate.optJSONObject("content")
+                val parts = content?.optJSONArray("parts")
+
+                if (parts == null || parts.length() == 0) {
+                    return@withContext Result.failure(
+                        Exception("Gemini لم يُرجع نصًا (finishReason: $finishReason) - غالبًا تم حجب الرد بواسطة فلاتر الأمان")
+                    )
+                }
+
+                val text = parts.getJSONObject(0).optString("text")
+                if (text.isBlank()) {
+                    return@withContext Result.failure(Exception("Gemini أرجع نصًا فارغًا"))
+                }
                 Result.success(text.trim().trim('"'))
             }
         } catch (e: Exception) {
