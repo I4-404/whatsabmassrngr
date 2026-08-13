@@ -27,7 +27,7 @@ object GeminiClient {
         apiKey: String,
         systemPrompt: String,
         senderName: String,
-        incomingMessage: String
+        conversationHistory: List<Pair<Boolean, String>> // true = من المرسل, false = رد سابق مني
     ): Result<String> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext Result.failure(IllegalStateException("مفتاح Gemini API غير موجود"))
@@ -36,12 +36,15 @@ object GeminiClient {
             val url =
                 "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent?key=$apiKey"
 
+            val historyText = conversationHistory.joinToString("\n") { (fromSender, text) ->
+                if (fromSender) "$senderName: $text" else "أنا (نور): $text"
+            }
+
             val fullPrompt = buildString {
                 append(systemPrompt.trim())
-                append("\n\n")
-                append("اسم المرسل: ").append(senderName).append("\n")
-                append("الرسالة الواردة: \"").append(incomingMessage).append("\"\n\n")
-                append("اكتب الرد المناسب فقط، بدون أي شرح أو علامات اقتباس إضافية.")
+                append("\n\n--- المحادثة حتى الآن ---\n")
+                append(historyText)
+                append("\n\n اكتب ردك التالي على آخر رسالة فقط، مع مراعاة سياق المحادثة كلها فوق. اكتب الرد فقط بدون أي شرح أو علامات اقتباس إضافية.")
             }
 
             val body = JSONObject().apply {
@@ -52,7 +55,7 @@ object GeminiClient {
                 ))
                 put("generationConfig", JSONObject().apply {
                     put("temperature", 0.8)
-                    put("maxOutputTokens", 200)
+                    put("maxOutputTokens", 400)
                 })
             }
 
