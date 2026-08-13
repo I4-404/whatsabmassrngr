@@ -21,7 +21,7 @@ object GeminiClient {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private const val MODEL = "gemini-2.0-flash"
+    private const val MODEL = "gemini-flash-latest"
 
     suspend fun generateReply(
         apiKey: String,
