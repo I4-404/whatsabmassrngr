@@ -38,10 +38,11 @@ class MessengerNotificationListener : NotificationListenerService() {
 
         val extras = sbn.notification.extras
         val sender = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
-        val message = extractMessageText(sbn.notification)
+        val history = extractConversationHistory(sbn.notification)
+        val lastIncoming = history.lastOrNull { it.first }?.second.orEmpty()
 
-        if (sender.isBlank() || message.isBlank()) return
-        // تجاهل الإشعارات المُجمّعة (ملخص عدة محادثات) والرسائل المرسلة من نفسي
+        if (sender.isBlank() || lastIncoming.isBlank()) return
+        // تجاهل الإشعارات المُجمّعة (ملخص عدة محادثات)
         if (sender.equals("Messenger", ignoreCase = true)) return
 
         val replyAction = findReplyAction(sbn.notification) ?: run {
@@ -50,14 +51,14 @@ class MessengerNotificationListener : NotificationListenerService() {
         }
 
         scope.launch {
-            handleIncoming(sender, message, sbn, replyAction)
+            handleIncoming(sender, lastIncoming, history, replyAction)
         }
     }
 
     private suspend fun handleIncoming(
         sender: String,
-        message: String,
-        sbn: StatusBarNotification,
+        lastIncoming: String,
+        history: List<Pair<Boolean, String>>,
         replyAction: Notification.Action
     ) {
         val ctx = applicationContext
@@ -73,13 +74,13 @@ class MessengerNotificationListener : NotificationListenerService() {
             ReplyMode.AI -> {
                 val apiKey = Prefs.apiKey(ctx).first()
                 val prompt = rule.customPrompt ?: Prefs.defaultPrompt(ctx).first()
-                val result = GeminiClient.generateReply(apiKey, prompt, sender, message)
+                val result = GeminiClient.generateReply(apiKey, prompt, sender, history)
                 result.getOrElse { err ->
                     Log.e(TAG, "خطأ Gemini: ${err.message}")
                     db.logDao().insert(
                         LogEntity(
                             contactName = sender,
-                            incomingMessage = message,
+                            incomingMessage = lastIncoming,
                             replyMessage = "فشل توليد الرد: ${err.message}",
                             success = false
                         )
@@ -90,15 +91,14 @@ class MessengerNotificationListener : NotificationListenerService() {
             ReplyMode.OFF -> return
         }
 
-        val delaySec = if (rule.mode == ReplyMode.AI) rule.delaySeconds else rule.delaySeconds
-        if (delaySec > 0) delay(delaySec * 1000L)
+        if (rule.delaySeconds > 0) delay(rule.delaySeconds * 1000L)
 
         val sent = sendReply(replyAction, replyText)
 
         db.logDao().insert(
             LogEntity(
                 contactName = sender,
-                incomingMessage = message,
+                incomingMessage = lastIncoming,
                 replyMessage = replyText,
                 success = sent
             )
@@ -127,19 +127,31 @@ class MessengerNotificationListener : NotificationListenerService() {
         }
     }
 
-    /** استخراج نص الرسالة من الإشعار (يدعم أيضًا إشعارات النمط المحادثي MessagingStyle) */
-    private fun extractMessageText(notification: Notification): String {
+    /**
+     * يستخرج سياق المحادثة (آخر عدة رسائل) من الإشعار لو كان بنمط المحادثات (MessagingStyle)،
+     * ده بيسمح للرد إنه ياخد بالسياق بدل ما يرد على آخر رسالة لوحدها من غير ذاكرة.
+     * true = الرسالة من الطرف التاني، false = رسالة سابقة مني (رد سابق).
+     */
+    private fun extractConversationHistory(notification: Notification): List<Pair<Boolean, String>> {
         val extras = notification.extras
 
-        // نمط المحادثات (Messaging Style) - يحتوي على آخر الرسائل
-        val messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
-        if (messages != null && messages.isNotEmpty()) {
-            val last = Notification.MessagingStyle.Message.getMessagesFromBundleArray(messages)
-                .lastOrNull()
-            if (last != null) return last.text?.toString().orEmpty()
+        val messagesArray = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+        if (messagesArray != null && messagesArray.isNotEmpty()) {
+            val messages = Notification.MessagingStyle.Message.getMessagesFromBundleArray(messagesArray)
+            val localUser = extras.getParcelable<android.app.Person>(Notification.EXTRA_MESSAGING_PERSON)
+            return messages.mapNotNull { m ->
+                val text = m.text?.toString()
+                if (text.isNullOrBlank()) null
+                else {
+                    // لو الرسالة من نفس شخص المستخدم المحلي (localUser) فهي رد سابق مني، غير كده هي واردة
+                    val isFromOther = localUser == null || m.senderPerson?.key != localUser.key
+                    isFromOther to text
+                }
+            }.takeLast(10)
         }
 
-        return extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+        val single = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+        return if (!single.isNullOrBlank()) listOf(true to single) else emptyList()
     }
 
     companion object {
