@@ -1,5 +1,6 @@
 package com.aa.autoresponder.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -118,9 +119,9 @@ private fun RuleRow(rule: RuleEntity, onClick: () -> Unit, onDelete: () -> Unit)
     }
 }
 
-// اختصار بسيط لجعل العمود قابلاً للنقر بدون استيراد إضافي معقد
+// اختصار بسيط لجعل العمود قابلاً للنقر
 private fun Modifier.clickableSafe(onClick: () -> Unit): Modifier =
-    this.then(androidx.compose.foundation.clickable(onClick = onClick))
+    this.clickable(onClick = onClick)
 
 @Composable
 private fun RuleDialog(
