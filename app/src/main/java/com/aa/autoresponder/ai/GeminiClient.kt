@@ -21,21 +21,23 @@ object GeminiClient {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private const val MODEL = "gemini-2.5-flash"
+    private val MODEL_FALLBACKS = listOf("gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-flash")
 
     suspend fun generateReply(
         apiKey: String,
         systemPrompt: String,
         senderName: String,
         conversationHistory: List<Pair<Boolean, String>>, // true = من المرسل, false = رد سابق مني
+        modelIndex: Int = 0,
         attempt: Int = 1
     ): Result<String> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext Result.failure(IllegalStateException("مفتاح Gemini API غير موجود"))
         }
+        val model = MODEL_FALLBACKS.getOrElse(modelIndex) { MODEL_FALLBACKS.last() }
         try {
             val url =
-                "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent?key=$apiKey"
+                "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
 
             val historyText = conversationHistory.joinToString("\n") { (fromSender, text) ->
                 if (fromSender) "$senderName: $text" else "أنا (نور): $text"
@@ -74,7 +76,11 @@ object GeminiClient {
                     // 503 = ازدحام مؤقت في السيرفر، جرب مرة واحدة تانية بعد ثانيتين
                     if (response.code == 503 && attempt < 2) {
                         kotlinx.coroutines.delay(2000)
-                        return@withContext generateReply(apiKey, systemPrompt, senderName, conversationHistory, attempt + 1)
+                        return@withContext generateReply(apiKey, systemPrompt, senderName, conversationHistory, modelIndex, attempt + 1)
+                    }
+                    // 404 = الموديل ده اتقفل، جرب الموديل الاحتياطي التالي في القائمة
+                    if (response.code == 404 && modelIndex < MODEL_FALLBACKS.lastIndex) {
+                        return@withContext generateReply(apiKey, systemPrompt, senderName, conversationHistory, modelIndex + 1, attempt)
                     }
                     return@withContext Result.failure(Exception("فشل الاتصال بـ Gemini: ${response.code} - $bodyStr"))
                 }
