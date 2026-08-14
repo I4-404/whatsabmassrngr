@@ -168,9 +168,7 @@ fun AppRoot() {
                     .padding(padding)
                     .fillMaxSize(),
                 enterTransition = {
-                    androidx.compose.animation.fadeIn(tween(280)) + androidx.compose.animation.slideIntoContainer(
-                        AnimatedContentTransitionScope.SlideDirection.Up, tween(280)
-                    )
+                    androidx.compose.animation.fadeIn(tween(280))
                 },
                 exitTransition = {
                     androidx.compose.animation.fadeOut(tween(180))
