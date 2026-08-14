@@ -21,13 +21,14 @@ object GeminiClient {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private const val MODEL = "gemini-flash-latest"
+    private const val MODEL = "gemini-2.5-flash"
 
     suspend fun generateReply(
         apiKey: String,
         systemPrompt: String,
         senderName: String,
-        conversationHistory: List<Pair<Boolean, String>> // true = من المرسل, false = رد سابق مني
+        conversationHistory: List<Pair<Boolean, String>>, // true = من المرسل, false = رد سابق مني
+        attempt: Int = 1
     ): Result<String> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext Result.failure(IllegalStateException("مفتاح Gemini API غير موجود"))
@@ -70,6 +71,11 @@ object GeminiClient {
             client.newCall(request).execute().use { response ->
                 val bodyStr = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
+                    // 503 = ازدحام مؤقت في السيرفر، جرب مرة واحدة تانية بعد ثانيتين
+                    if (response.code == 503 && attempt < 2) {
+                        kotlinx.coroutines.delay(2000)
+                        return@withContext generateReply(apiKey, systemPrompt, senderName, conversationHistory, attempt + 1)
+                    }
                     return@withContext Result.failure(Exception("فشل الاتصال بـ Gemini: ${response.code} - $bodyStr"))
                 }
                 val json = JSONObject(bodyStr)
