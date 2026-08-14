@@ -16,6 +16,14 @@ object Prefs {
     private val KEY_MASTER_ENABLED = booleanPreferencesKey("master_enabled")
     private val KEY_DEFAULT_PROMPT = stringPreferencesKey("default_prompt")
     private val KEY_DEFAULT_DELAY = intPreferencesKey("default_delay_seconds")
+    private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
+
+    fun themeMode(ctx: Context): Flow<String> =
+        ctx.dataStore.data.map { it[KEY_THEME_MODE] ?: "SYSTEM" }
+
+    suspend fun setThemeMode(ctx: Context, value: String) {
+        ctx.dataStore.edit { it[KEY_THEME_MODE] = value }
+    }
 
     fun apiKey(ctx: Context): Flow<String> =
         ctx.dataStore.data.map { it[KEY_API] ?: "" }
