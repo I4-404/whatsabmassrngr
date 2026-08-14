@@ -5,39 +5,33 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -59,7 +53,6 @@ import com.aa.autoresponder.ui.screens.SettingsScreen
 import com.aa.autoresponder.ui.theme.AppThemeMode
 import com.aa.autoresponder.ui.theme.AutoResponderTheme
 import com.aa.autoresponder.util.Prefs
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,88 +91,65 @@ private val navItems = listOf(
 @Composable
 fun AppRoot() {
     val navController: NavHostController = rememberNavController()
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
+    var menuExpanded by remember { mutableStateOf(false) }
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: "home"
     val currentLabel = navItems.firstOrNull { it.route == currentRoute }?.label ?: "الرد التلقائي"
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet {
-                Column(modifier = Modifier.padding(vertical = 24.dp)) {
-                    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
-                        Text(
-                            "الرد التلقائي",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            "لماسنجر بالذكاء الاصطناعي",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    navItems.forEach { item ->
-                        NavigationDrawerItem(
-                            icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label) },
-                            selected = currentRoute == item.route,
-                            colors = NavigationDrawerItemDefaults.colors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            ),
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                navController.navigate(item.route) {
-                                    popUpTo(navController.graph.startDestinationId)
-                                    launchSingleTop = true
-                                }
-                            },
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-            }
-        }
-    ) {
-        Scaffold(
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = { Text(currentLabel, fontWeight = FontWeight.SemiBold) },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "القائمة")
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(currentLabel, fontWeight = FontWeight.SemiBold) },
+                actions = {
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "القائمة")
                         }
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                )
-            }
-        ) { padding ->
-            NavHost(
-                navController = navController,
-                startDestination = "home",
-                modifier = Modifier
-                    .padding(padding)
-                    .fillMaxSize(),
-                enterTransition = {
-                    androidx.compose.animation.fadeIn(tween(280))
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            navItems.forEach { item ->
+                                DropdownMenuItem(
+                                    text = { Text(item.label) },
+                                    leadingIcon = { Icon(item.icon, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        navController.navigate(item.route) {
+                                            popUpTo(navController.graph.startDestinationId)
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
                 },
-                exitTransition = {
-                    androidx.compose.animation.fadeOut(tween(180))
-                }
-            ) {
-                composable("home") { HomeScreen() }
-                composable("rules") { RulesScreen() }
-                composable("logs") { LogsScreen() }
-                composable("settings") { SettingsScreen() }
-                composable("developer") { DeveloperScreen() }
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+        }
+    ) { padding ->
+        NavHost(
+            navController = navController,
+            startDestination = "home",
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+            enterTransition = {
+                androidx.compose.animation.fadeIn(tween(280))
+            },
+            exitTransition = {
+                androidx.compose.animation.fadeOut(tween(180))
             }
+        ) {
+            composable("home") { HomeScreen() }
+            composable("rules") { RulesScreen() }
+            composable("logs") { LogsScreen() }
+            composable("settings") { SettingsScreen() }
+            composable("developer") { DeveloperScreen() }
         }
     }
 }
