@@ -55,7 +55,10 @@ object GeminiClient {
                 ))
                 put("generationConfig", JSONObject().apply {
                     put("temperature", 0.8)
-                    put("maxOutputTokens", 400)
+                    put("maxOutputTokens", 800)
+                    put("thinkingConfig", JSONObject().apply {
+                        put("thinkingBudget", 0) // تعطيل التفكير الداخلي عشان الرد ميتقطعش
+                    })
                 })
             }
 
